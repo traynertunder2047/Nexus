@@ -1,0 +1,22 @@
+# Group 1 - Identity & Contact Recon
+requests                 # HTTP layer for social finder, HIBP, DeHashed, ip-api
+python-dotenv            # load .env API keys/endpoints into environment
+email-validator          # name-to-email syntax validation
+phonenumbers             # phone carrier & location lookup (no API key)
+holehe                   # email -> registered-services check (Google/GitHub/etc.)
+
+# Group 2 - Infrastructure & Network Recon
+whoisdomain              # WHOIS/RDAP lookups (registration date, registrar)
+whodap                   # transitive dep of whoisdomain (sometimes missed by pip)
+dnspython                # DNS record queries (A, MX, TXT, NS)
+# socket, json are Python stdlib (port scanner / banner grabber)
+
+# Group 3 - File Analyzers (Metadata)
+Pillow                   # EXIF extraction (PIL.ExifTags)
+pypdf                    # PDF metadata
+python-docx              # DOCX metadata
+
+# Group 4 - Core System & Telegram Integration
+jinja2                   # HTML/Markdown reporting templates
+python-telegram-bot      # Telegram bot interface
+# sqlite3 is Python stdlib (osint_history.db)
