@@ -15,8 +15,8 @@ dnspython                # DNS record queries (A, MX, TXT, NS)
 Pillow                   # EXIF extraction (PIL.ExifTags)
 pypdf                    # PDF metadata
 python-docx              # DOCX metadata
+opencv-contrib-python    # Doppelganger (Mode 2): face detection + LBPH comparison (numpy comes along)
 
-# Group 4 - Core System & Telegram Integration
+# Group 4 - Core System & Reporting
 jinja2                   # HTML/Markdown reporting templates
-python-telegram-bot      # Telegram bot interface
 # sqlite3 is Python stdlib (osint_history.db)
