@@ -1,46 +1,17 @@
-"""DNS Enumerator - modules/network/dns_enumerator.py
-====================================================
-DNS footprint enumeration for OSINT asset mapping:
-
-  1) Core record mapping      - A/AAAA, MX, NS, TXT (SPF / DMARC / SaaS
-                                verification tokens), CNAME, PTR (reverse)
-  2) Subdomain discovery      - Certificate Transparency (crt.sh), optional
-                                passive-DNS providers (SecurityTrails /
-                                VirusTotal), dictionary brute-force with
-                                wildcard filtering, permutation generation
-  3) Asset intelligence       - wildcard DNS detection, zone transfer (AXFR)
-     & vulnerability          - subdomain takeover (dangling CNAME) checks
-       indicators
-
-Design notes
-------------
-* DNS queries go through a small seam (_resolve) so every stage can be
-  tested fully offline by monkeypatching it.
-* Every stage degrades gracefully: optional API-key stages report
-  status "skipped" when no key is set (they never fail the run); HTTP /
-  DNS failures produce per-stage notes.
-* Politeness limits: brute-force/permutation scanning is bounded by
-  max_queries, each request has a timeout, and takeover checks fetch at
-  most one page per cloud-backed host.
-
-Run from the repo root:
-  .\\.venv\\Scripts\\python.exe -m modules.network.dns_enumerator example.com
-  .\\.venv\\Scripts\\python.exe -m modules.network.dns_enumerator example.com --no-axfr
-  .\\.venv\\Scripts\\python.exe -m modules.network.dns_enumerator example.com --json
-"""
-
 import concurrent.futures, json, ipaddress, os, random, re, socket, sys, requests
 
 from time import monotonic, sleep
 
 import dns.exception, dns.query, dns.rdatatype, dns.reversename, dns.resolver
 
+from ..usage import usage_line
+
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
 
 CRT_SH_URL = "https://crt.sh/"
-USER_AGENT = "OSINTNexusBot-DNSEnumerator/1.0"
+USER_AGENT = "Nexus/1.0"
 
 # Default wordlist for dictionary brute-force (overridable via run/CLI).
 DEFAULT_WORDLIST = [
@@ -622,14 +593,19 @@ def subdomain_takeover_check(hosts, timeout=8.0):
 # Orchestration: run()
 # ---------------------------------------------------------------------------
 
-def run(domain, timeout=5.0, do_passive=True, do_bruteforce=True,
-        do_permutations=True, do_axfr=True, do_takeover=True,
+def run(domain, timeout=5.0, do_passive=True, do_bruteforce=False,
+        do_permutations=False, do_axfr=False, do_takeover=False,
         max_queries=250, max_workers=10, wordlist=None):
-    """Full DNS enumeration run over a domain; returns the JSON payload.
+    """DNS enumeration run over a domain; returns the JSON payload.
+
+    Passive discovery (records, CT logs, passive DNS) runs by default;
+    active stages are opt-in: dictionary brute-force, permutations, zone
+    transfer and takeover checks.
 
     The payload is organized for humans AND machines:
-      domain -> status -> elapsed_ms -> record_mapping -> subdomain_discovery
-      -> known_subdomains -> asset_intelligence -> findings -> summary
+      domain -> status -> elapsed_ms -> stages -> record_mapping
+      -> subdomain_discovery -> known_subdomains -> asset_intelligence
+      -> findings -> summary
 
     * ``status`` is the top-level verdict: "ok" when every stage that ran
       succeeded, "partial" when an optional stage reported an error, or
@@ -812,6 +788,9 @@ def run(domain, timeout=5.0, do_passive=True, do_bruteforce=True,
         "domain": domain,
         "status": status,
         "elapsed_ms": elapsed_ms,
+        "stages": {"passive": do_passive, "bruteforce": do_bruteforce,
+                   "permutations": do_permutations, "axfr": do_axfr,
+                   "takeover": do_takeover},
         "record_mapping": rm,
         "subdomain_discovery": discovery,
         "known_subdomains": sorted(known),
@@ -857,6 +836,13 @@ def render(payload):
 
     rows.append(("Status", payload["status"]))
     rows.append(("Elapsed", f"{payload['elapsed_ms']} ms"))
+    stages = payload.get("stages")
+    if stages:
+        off = [name for name in ("bruteforce", "permutations", "axfr",
+                                 "takeover") if not stages.get(name)]
+        if off:
+            rows.append(("Scan scope",
+                         f"active stages off: {', '.join(off)} - use --full"))
     rows.append(("IPv4 (A)", ", ".join(rm["a"]) if rm["a"] else "(none)"))
     rows.append(("IPv6 (AAAA)",
                  ", ".join(rm["aaaa"]) if rm["aaaa"] else "(none)"))
@@ -987,26 +973,58 @@ def _read_wordlist(path):
 
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
-    flags = {"do_passive": True, "do_bruteforce": True,
-             "do_permutations": True, "do_axfr": True, "do_takeover": True}
+    flags = {"do_passive": True, "do_bruteforce": False,
+             "do_permutations": False, "do_axfr": False,
+             "do_takeover": False}
+    no_bruteforce = False
     want_json = False
     wordlist_path = None
+    timeout, max_queries, max_workers = 5.0, 250, 10
     positional = []
-    usage = ("Usage: python -m modules.network.dns_enumerator [--json] "
-             "<domain> [--wordlist FILE] [--no-passive] [--no-bruteforce] "
-             "[--no-permutations] [--no-axfr] [--no-takeover]")
+    usage = usage_line(
+        "modules.network.dns_enumerator",
+        "[--json] <domain> [--wordlist FILE] [--full] [--bruteforce] [--permutations] "
+        "[--axfr] [--takeover] [--no-passive] [--timeout SEC] [--workers N] [--max-queries N]")
     i = 0
     while i < len(argv):
         arg = argv[i]
         if arg in ("-h", "--help"):
-            print(__doc__.split("Run from the repo root:")[0])
             print(usage)
+            print("Legacy aliases still accepted: --no-bruteforce --no-permutations --no-axfr --no-takeover --no-passive")
             return 0
         if arg in ("--json", "-j"):
             want_json = True
+        elif arg == "--full":
+            for key in flags:
+                flags[key] = True
+        elif arg in ("--bruteforce", "--permutations", "--axfr",
+                     "--takeover"):
+            flags["do_" + arg[2:]] = True
         elif arg in ("--no-passive", "--no-bruteforce", "--no-permutations",
                      "--no-axfr", "--no-takeover"):
             flags[arg.replace("--no-", "do_").replace("-", "_")] = False
+            if arg == "--no-bruteforce":
+                no_bruteforce = True
+        elif arg in ("--timeout", "--workers", "--max-queries"):
+            if i + 1 >= len(argv):
+                print(f"{arg} requires a value", file=sys.stderr)
+                return 2
+            raw = argv[i + 1]
+            try:
+                value = float(raw) if arg == "--timeout" else int(raw)
+            except ValueError:
+                print(f"Invalid {arg} value: {raw}", file=sys.stderr)
+                return 2
+            if value <= 0:
+                print(f"{arg} must be greater than 0", file=sys.stderr)
+                return 2
+            if arg == "--timeout":
+                timeout = value
+            elif arg == "--workers":
+                max_workers = int(value)
+            else:
+                max_queries = int(value)
+            i += 1
         elif arg == "--wordlist":
             if i + 1 >= len(argv):
                 print("--wordlist requires a file path", file=sys.stderr)
@@ -1024,6 +1042,10 @@ def main(argv=None):
     if not positional:
         print(usage)
         return 1
+    if len(positional) > 1:
+        print("One domain at a time.", file=sys.stderr)
+        print(usage, file=sys.stderr)
+        return 2
 
     wordlist = None
     if wordlist_path:
@@ -1038,7 +1060,13 @@ def main(argv=None):
                   file=sys.stderr)
             return 2
 
-    payload = run(positional[0], wordlist=wordlist, **flags)
+    # --wordlist only matters to the dictionary stage: enable it unless
+    # the legacy --no-bruteforce flag explicitly turned it off.
+    if wordlist_path and not no_bruteforce:
+        flags["do_bruteforce"] = True
+
+    payload = run(positional[0], timeout=timeout, max_queries=max_queries,
+                  max_workers=max_workers, wordlist=wordlist, **flags)
     if want_json:
         print(json.dumps(payload, indent=2))
     else:
