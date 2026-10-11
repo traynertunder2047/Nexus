@@ -7,3 +7,11 @@ output/
 .venv/
 __pycache__/
 *.pyc
+
+.freebuff/
+
+# Nexus REPL history
+.nexus_history
+
+# Moved module headers (see MODULE_DOCS.md)
+MODULE_DOCS.md

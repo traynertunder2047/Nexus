@@ -1,4 +1,4 @@
-# OSINTNexusBot
+# Nexus
 
 A modular Python 3.14 CLI toolchain for **open-source intelligence (OSINT)
 collection and correlation** - built to support lawful, authorized research
@@ -49,13 +49,16 @@ supporting modules for identity and network reconnaissance:
 .\.venv\Scripts\python.exe -m modules.metadata.atlas "near the Eiffel Tower, Paris"
 .\.venv\Scripts\python.exe -m modules.metadata.locus photo.jpg
 .\.venv\Scripts\python.exe -m modules.metadata.doppelganger photo.jpg [handle1 handle2 ...]
+.\.venv\Scripts\python.exe -m modules.network.dns_enumerator example.com --full   # full DNS footprint enumeration
+.\.venv\Scripts\python.exe -m modules.network.whois_lookup example.com   # WHOIS/RDAP registration metadata
+.\.venv\Scripts\python.exe -m modules.network.whois_lookup --multi example.com example.org   # raced: fastest answer printed first
 ```
 
 Implementation reports: `REPORT_ATLAS_LOCUS.md`, `REPORT_DOPPELGANGER.md`.
 
 ## Responsibility
 
-OSINTNexusBot is an analysis tool for lawful, consensual, and authorized
+Nexus is an analysis tool for lawful, consensual, and authorized
 investigations (defensive research, missing-person support, media
 verification, personal-security audits). Operators are responsible for
 complying with applicable laws, platform terms of service, and privacy

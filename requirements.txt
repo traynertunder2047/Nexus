@@ -3,10 +3,10 @@ requests                 # HTTP layer for social finder, HIBP, DeHashed, ip-api
 python-dotenv            # load .env API keys/endpoints into environment
 email-validator          # name-to-email syntax validation
 phonenumbers             # phone carrier & location lookup (no API key)
-holehe                   # email -> registered-services check (Google/GitHub/etc.)
 
 # Group 2 - Infrastructure & Network Recon
 whoisdomain              # WHOIS/RDAP lookups (registration date, registrar)
+tld                      # required by whoisdomain (pip check fails without it)
 whodap                   # transitive dep of whoisdomain (sometimes missed by pip)
 dnspython                # DNS record queries (A, MX, TXT, NS)
 # socket, json are Python stdlib (port scanner / banner grabber)
@@ -16,7 +16,17 @@ Pillow                   # EXIF extraction (PIL.ExifTags)
 pypdf                    # PDF metadata
 python-docx              # DOCX metadata
 opencv-contrib-python    # Doppelganger (Mode 2): face detection + LBPH comparison (numpy comes along)
+ImageHash                # perceptual hash (pHash) for Locus hash + Sherlock visual gate (Pillow + numpy)
+pytesseract              # OCR for Locus Stage 1 (also requires the Tesseract binary on PATH)
+langdetect               # language -> country prior for Atlas/Locus (auto-detect signage language)
+# torch + geoclip are optional heavy deps for Locus GeoCLIP stage (PHOTO_GEOLOC_USE_GEOCLIP=1); not listed here
 
-# Group 4 - Core System & Reporting
-jinja2                   # HTML/Markdown reporting templates
-# sqlite3 is Python stdlib (osint_history.db)
+# Group 4 - Core System & Shell
+# sqlite3 is Python stdlib
+prompt_toolkit           # Nexus REPL: input, Tab completion, persistent history
+rich                     # Nexus REPL: colored output, banner, help table
+pyfiglet                 # Nexus REPL: FIGlet ASCII banner
+
+# Group 5 - Development / Testing
+pytest                 # test runner for tests/ suite
+pycryptodome           # independent Keccak-512 reference used by tests (original Keccak padding, unlike hashlib.sha3_512)
