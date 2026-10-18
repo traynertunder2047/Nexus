@@ -1249,7 +1249,8 @@ def scan_ips(ips, label="", **kw):
 def run(target, ports=None, timeout=2.0, workers=50, do_probe=True,
         protocol="tcp", udp_ports=None, rate=0.0, jitter=0.0, shuffle=False,
         retries=1, do_tls=True, deep_tls=True, skip_hostdown=False,
-        seed=None, os_fingerprint=False, min_rate=None):
+        seed=None, os_fingerprint=False, min_rate=None,
+        max_hosts=MAX_HOSTS_DEFAULT):
     """Full scan; returns the JSON payload.
 
     Payload shape mirrors the sibling modules:
@@ -1268,12 +1269,15 @@ def run(target, ports=None, timeout=2.0, workers=50, do_probe=True,
     if not isinstance(workers, int) or workers < 1 or workers > 50:
         return {"status": "error", "target": target,
                 "error": "--workers must be between 1 and 50"}
+    if not isinstance(max_hosts, int) or max_hosts < 1:
+        return {"status": "error", "target": target,
+                "error": "--max-hosts must be at least 1"}
 
     # expand_targets validates each piece, and the whole spec may legitimately
     # be a comma list / CIDR that is not itself a hostname.
     start = monotonic()
     try:
-        targets = expand_targets(target)
+        targets = expand_targets(target, max_hosts)
     except ValueError as e:
         return {"status": "error", "error": str(e)}
 
@@ -1541,7 +1545,7 @@ _USAGE_FOOTER = """
   --jitter F            spread each delay by +/-F of the interval (0-1)
   --shuffle             randomise port order within the budget
   --retries N           attempts per port before calling it filtered
-  --no-probe            skip banner and version probes
+  --no-probe            skip TCP banner/version/TLS probes (UDP unaffected)
   --no-tls              do not probe TLS certificates
   --quick-tls           one TLS handshake, no detail pass
   --skip-hostdown       skip a host that answers nothing
@@ -1611,6 +1615,8 @@ def main(argv=None):
             elif arg == "--max-hosts":
                 o["max_hosts"] = _need_value(argv, i, "--max-hosts", int,
                                              "a number")
+                if o["max_hosts"] < 1:
+                    raise ValueError("--max-hosts must be at least 1")
                 i += 1
             elif arg == "--timeout":
                 o["timeout"] = _need_value(argv, i, "--timeout", float,
@@ -1718,6 +1724,14 @@ def main(argv=None):
               f"it.", file=sys.stderr)
         return 2
 
+    if not o["do_probe"]:
+        if not o["do_tls"] or not o["deep_tls"]:
+            print("--no-tls/--quick-tls have no effect with --no-probe.",
+                  file=sys.stderr)
+        if o["protocol"] in ("udp", "both"):
+            print("--no-probe only affects TCP; UDP ports are still probed.",
+                  file=sys.stderr)
+
     payload = run(positional[0], ports=ports, timeout=o["timeout"],
                   workers=o["workers"], do_probe=o["do_probe"],
                   protocol=o["protocol"], udp_ports=udp_ports,
@@ -1725,7 +1739,8 @@ def main(argv=None):
                   shuffle=o["shuffle"], retries=o["retries"],
                   do_tls=o["do_tls"], deep_tls=o["deep_tls"],
                   skip_hostdown=o["skip_hostdown"], seed=o["seed"],
-                  os_fingerprint=o["os_fingerprint"])
+                  os_fingerprint=o["os_fingerprint"],
+                  max_hosts=o["max_hosts"])
 
     if o["xml"]:
         cmdline = " ".join(["port_scanner"] + list(argv))

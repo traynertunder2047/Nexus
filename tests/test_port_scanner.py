@@ -432,6 +432,47 @@ def test_cli_allows_huge_range_with_flag(monkeypatch):
     assert len(seen["ports"]) == 65535
 
 
+def test_cli_forwards_max_hosts(monkeypatch):
+    seen = {}
+
+    def fake_run(t, **k):
+        seen.update(k)
+        return {"target": t, "status": "ok", "elapsed_ms": 1,
+                "resolution": {"ips": []}, "ports_scanned": 1,
+                "scan": {"timeout": 2.0, "workers": 1, "rate": 0},
+                "hosts": [], "findings": [], "summary": "done"}
+    monkeypatch.setattr(ps, "run", fake_run)
+    assert ps.main(["1.2.3.4", "--max-hosts", "77"]) == 0
+    assert seen["max_hosts"] == 77
+
+
+def test_cli_max_hosts_applies_to_expansion(capsys):
+    assert ps.main(["10.0.0.0/24", "--ports", "80", "--max-hosts", "10"]) == 1
+    assert "over --max-hosts 10" in capsys.readouterr().out
+
+
+def test_cli_no_probe_warns_when_tls_flags_are_inert(monkeypatch, capsys):
+    monkeypatch.setattr(ps, "run", lambda t, **k: {
+        "target": t, "status": "ok", "elapsed_ms": 1,
+        "resolution": {"ips": []}, "ports_scanned": 1,
+        "scan": {"timeout": 2.0, "workers": 1, "rate": 0},
+        "hosts": [], "findings": [], "summary": "done"})
+    for flag in ("--no-tls", "--quick-tls"):
+        capsys.readouterr()
+        assert ps.main(["1.2.3.4", "--no-probe", flag]) == 0
+        assert "no effect with --no-probe" in capsys.readouterr().err
+
+
+def test_cli_no_probe_warns_udp_port_scope(monkeypatch, capsys):
+    monkeypatch.setattr(ps, "run", lambda t, **k: {
+        "target": t, "status": "ok", "elapsed_ms": 1,
+        "resolution": {"ips": []}, "ports_scanned": 1,
+        "scan": {"timeout": 2.0, "workers": 1, "rate": 0},
+        "hosts": [], "findings": [], "summary": "done"})
+    assert ps.main(["1.2.3.4", "--no-probe", "--protocol", "udp"]) == 0
+    assert "still probed" in capsys.readouterr().err
+
+
 def test_cli_refuses_preset_and_ports_together():
     assert ps.main(["1.2.3.4", "--ports", "80", "--preset", "top"]) == 2
 
@@ -449,6 +490,11 @@ def test_cli_rejects_excessive_workers():
     assert ps.main(["1.2.3.4", "--workers", "51"]) == 2
 
 
+def test_cli_rejects_invalid_max_hosts():
+    for value in ("0", "-3"):
+        assert ps.main(["1.2.3.4", "--max-hosts", value]) == 2
+
+
 def test_run_rejects_non_positive_timeout():
     out = ps.run("example.com", ports=[80], timeout=0)
     assert out["status"] == "error"
@@ -459,6 +505,12 @@ def test_run_rejects_excessive_workers():
     out = ps.run("example.com", ports=[80], workers=51)
     assert out["status"] == "error"
     assert "--workers must be between 1 and 50" in out["error"]
+
+
+def test_run_rejects_invalid_max_hosts():
+    out = ps.run("example.com", ports=[80], max_hosts=0)
+    assert out["status"] == "error"
+    assert "--max-hosts must be at least 1" in out["error"]
 
 
 def test_cli_rejects_negative_rate():
@@ -859,6 +911,17 @@ def test_run_forwards_min_rate(monkeypatch):
         "resolution": {"ips": ["1.2.3.4"]}, "hosts": []})
     ps.run("1.2.3.4", ports=[80], rate=40.0, min_rate=7)
     assert seen["min_rate"] == 7
+
+
+def test_run_forwards_max_hosts(monkeypatch):
+    seen = {}
+    monkeypatch.setattr(ps, "expand_targets",
+                        lambda t, m=256: seen.update(max_hosts=m) or [t])
+    monkeypatch.setattr(ps, "scan_target", lambda *a, **k: {
+        "status": "ok",
+        "resolution": {"ips": ["1.2.3.4"]}, "hosts": []})
+    assert ps.run("1.2.3.4", ports=[80], max_hosts=123)["status"] == "ok"
+    assert seen["max_hosts"] == 123
 
 
 def test_cli_json_path(monkeypatch, capsys):
