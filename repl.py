@@ -68,7 +68,7 @@ HELP_IDENTITY_ROWS = [
 HELP_NETWORK_ROWS = [
     ("whois", "<domain> [...]", "--json --multi [--workers N]", "WHOIS record lookup (--multi races domains, fastest answer first)"),
     ("dns", "<domain>", "--json --wordlist FILE --full --bruteforce --permutations --axfr --takeover --no-passive --timeout SEC --workers N --max-queries N", "DNS records + subdomain enumeration (--full enables active stages)"),
-    ("ports", "<host>", "--json --ports SPEC --workers N --no-probe --timeout SEC", "TCP port scanner"),
+    ("ports", "<target>", "--json --xml FILE --ports SPEC --preset NAME --max-ports N --yes-full-sweep --max-hosts N --protocol P --udp-ports SPEC --timeout SEC --workers N --rate N --min-rate N --jitter F --shuffle --retries N --no-probe --no-tls --quick-tls --skip-hostdown --os --seed N --help", "TCP/UDP port scanner (version probes, OS fingerprint, nmap XML)"),
     ("geo", "<ip>", "--json --timeout SEC", "IP geolocation"),
 ]
 
