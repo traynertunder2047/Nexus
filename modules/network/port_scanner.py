@@ -32,9 +32,11 @@ Run from the repo root:
   ./.venv/Scripts/python.exe -m modules.network.port_scanner example.com --json
 """
 
-import concurrent.futures, errno, ipaddress, json, re, socket, ssl, sys
+import concurrent.futures, errno, ipaddress, json, math, re, socket, ssl, sys
 from datetime import datetime, timezone
 from time import monotonic
+
+from ..usage import usage_line
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -379,6 +381,12 @@ def run(target, ports=None, timeout=2.0, workers=50, do_probe=True):
     err = validate_target(target)
     if err:
         return {"status": "error", "error": err}
+    if not math.isfinite(timeout) or timeout <= 0:
+        return {"status": "error", "target": target,
+                "error": "--timeout must be greater than 0"}
+    if not isinstance(workers, int) or workers < 1 or workers > 50:
+        return {"status": "error", "target": target,
+                "error": "--workers must be between 1 and 50"}
     port_list = (list(DEFAULT_PORTS) if ports is None
                  else sorted(set(int(p) for p in ports)))
     if not port_list:
@@ -391,6 +399,10 @@ def run(target, ports=None, timeout=2.0, workers=50, do_probe=True):
                 "error": f"Cannot resolve '{target}': {e}"}
     # SNI / verification name: the domain when given, the IP otherwise.
     server_hostname = target
+    if len(ips) * len(port_list) > 2000:
+        return {"status": "error", "target": target,
+                "error": (f"refusing to scan {len(ips) * len(port_list)} "
+                          "combinations (max 2000: narrow --ports)")}
     hosts = _scan_all(ips, port_list, timeout, workers, do_probe,
                       server_hostname)
     findings = _build_findings(hosts, len(port_list))
@@ -491,9 +503,9 @@ def main(argv=None):
     workers = 50
     do_probe = True
     positional = []
-    usage = ("Usage: python -m modules.network.port_scanner [--json] "
-             "<target> [--ports SPEC] [--timeout SEC] [--workers N] "
-             "[--no-probe]")
+    usage = usage_line(
+        "modules.network.port_scanner",
+        "[--json] <host> [--ports SPEC] [--timeout SEC] [--workers N] [--no-probe]")
     i = 0
     while i < len(argv):
         arg = argv[i]
@@ -521,6 +533,10 @@ def main(argv=None):
                 print(f"Invalid --timeout '{argv[i + 1]}'",
                       file=sys.stderr)
                 return 2
+            if not math.isfinite(timeout) or timeout <= 0:
+                print("--timeout must be greater than 0",
+                      file=sys.stderr)
+                return 2
             i += 1
         elif arg == "--workers":
             if i + 1 >= len(argv):
@@ -533,8 +549,9 @@ def main(argv=None):
                 print(f"Invalid --workers '{argv[i + 1]}'",
                       file=sys.stderr)
                 return 2
-            if workers < 1:
-                print("--workers must be at least 1", file=sys.stderr)
+            if workers < 1 or workers > 50:
+                print("--workers must be between 1 and 50",
+                      file=sys.stderr)
                 return 2
             i += 1
         elif arg == "--no-probe":
